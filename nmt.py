@@ -85,40 +85,28 @@ class Model():
 
         self.init = tf.global_variables_initializer()
 
-m = Model()
+    def forward(self, batch_):
+        """
+        Forward a batch through the current model.
+        """
+        with tf.Session() as sess:
+            sess.run(m.init)
 
-with tf.Session() as sess:
+            batch_, batch_length_ = helpers.batch(batch_)
+            print('batch_encoded:\n' + str(batch_))
 
-    sess.run(m.init)
+            din_, dlen_ = helpers.batch(np.ones(shape=(3, 1), dtype=np.int32),
+                                        max_sequence_length=4)
+            print('decoder inputs:\n' + str(din_))
 
-    batch_ = [[6], [3, 4], [9, 8, 7]]
+            pred_ = sess.run(self.decoder_prediction,
+                feed_dict={
+                    self.encoder_inputs: batch_,
+                    self.decoder_inputs: din_,
+                })
+            print('decoder predictions:\n' + str(pred_))
 
-    batch_, batch_length_ = helpers.batch(batch_)
-    print('batch_encoded:\n' + str(batch_))
-
-    din_, dlen_ = helpers.batch(np.ones(shape=(3, 1), dtype=np.int32),
-                                max_sequence_length=4)
-    print('decoder inputs:\n' + str(din_))
-
-    pred_ = sess.run(m.decoder_prediction,
-        feed_dict={
-            m.encoder_inputs: batch_,
-            m.decoder_inputs: din_,
-        })
-    print('decoder predictions:\n' + str(pred_))
-
-    batch_size = 100
-
-    batches = helpers.random_sequences(length_from=3, length_to=8,
-                                       vocab_lower=2, vocab_upper=10,
-                                       batch_size=batch_size)
-
-    print('head of the batch:')
-    for seq in next(batches)[:10]:
-        print(seq)
-
-
-    def next_feed():
+    def _next_feed(self, batches):
         batch = next(batches)
         encoder_inputs_, _ = helpers.batch(batch)
         decoder_targets_, _ = helpers.batch(
@@ -128,33 +116,53 @@ with tf.Session() as sess:
             [[C.EOS] + (sequence) for sequence in batch]
         )
         return {
-            m.encoder_inputs: encoder_inputs_,
-            m.decoder_inputs: decoder_inputs_,
-            m.decoder_targets: decoder_targets_,
+            self.encoder_inputs: encoder_inputs_,
+            self.decoder_inputs: decoder_inputs_,
+            self.decoder_targets: decoder_targets_,
         }
 
+    def train(self, batch_size=100, max_batches=1000):
+
+        with tf.Session() as sess:
+
+            sess.run(self.init)
+
+            batches = helpers.random_sequences(length_from=3, length_to=8,
+                                           vocab_lower=2, vocab_upper=10,
+                                           batch_size=batch_size)
+
+            print('head of the batch:')
+            for seq in next(batches)[:10]:
+                print(seq)
+
+            loss_track = []
+            batches_in_epoch = 100
 
 
-    loss_track = []
+            for batch in range(max_batches):
+                fd = self._next_feed(batches)
+                _, l = sess.run([self.train_op, self.loss], fd)
+                loss_track.append(l)
 
-    max_batches = 2000
-    batches_in_epoch = 100
+                if batch == 0 or batch % batches_in_epoch == 0:
+                    print('batch {}'.format(batch))
+                    print('  minibatch loss: {}'.format(sess.run(self.loss, fd)))
+                    predict_ = sess.run(self.decoder_prediction, fd)
+                    for i, (inp, pred) in enumerate(zip(fd[self.encoder_inputs].T, predict_.T)):
+                        print('  sample {}:'.format(i + 1))
+                        print('    input     > {}'.format(inp))
+                        print('    predicted > {}'.format(pred))
+                        if i >= 2:
+                            break
+                    print()
 
 
-    for batch in range(max_batches):
-        fd = next_feed()
-        _, l = sess.run([m.train_op, m.loss], fd)
-        loss_track.append(l)
+# create model instance
+m = Model()
 
-        if batch == 0 or batch % batches_in_epoch == 0:
-            print('batch {}'.format(batch))
-            print('  minibatch loss: {}'.format(sess.run(m.loss, fd)))
-            predict_ = sess.run(m.decoder_prediction, fd)
-            for i, (inp, pred) in enumerate(zip(fd[m.encoder_inputs].T, predict_.T)):
-                print('  sample {}:'.format(i + 1))
-                print('    input     > {}'.format(inp))
-                print('    predicted > {}'.format(pred))
-                if i >= 2:
-                    break
-            print()
+# try current predictions with a dummy batch
+batch_ = [[6], [3, 4], [9, 8, 7]]
+m.forward(batch_)
 
+# train model
+m.train(batch_size=100, max_batches=1000)
