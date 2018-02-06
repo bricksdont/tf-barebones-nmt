@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 # Authors:
-# Matvey Ezhov / https://github.com/ematvey
+# Matvey Ezhov / https://github.com/ematvey/tensorflow-seq2seq-tutorials
 # Mathias Müller / mmueller@cl.uzh.ch
 
 from __future__ import absolute_import
