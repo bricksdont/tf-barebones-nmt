@@ -28,7 +28,6 @@ class Model():
         self.encoder_hidden_units = encoder_hidden_units
         self.decoder_hidden_units = decoder_hidden_units
 
-
     def build_embeddings(self):
 
         self.encoder_inputs = tf.placeholder(shape=(None, None), dtype=tf.int32, name='encoder_inputs')
@@ -75,7 +74,7 @@ class Model():
 
         self.decoder_prediction = tf.argmax(self.decoder_logits, 2)
 
-        self.stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+        self.stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(
             labels=tf.one_hot(self.decoder_targets, depth=self.vocab_size, dtype=tf.float32),
             logits=self.decoder_logits,
         )
