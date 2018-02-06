@@ -15,58 +15,81 @@ import tensorflow as tf
 import helpers
 import constants as C
 
-vocab_size = 10
-input_embedding_size = 20
+class Model():
 
-encoder_hidden_units = 20
-decoder_hidden_units = encoder_hidden_units
+    def __init__(self,
+                 vocab_size=10,
+                 input_embedding_size=20,
+                 encoder_hidden_units=20,
+                 decoder_hidden_units=20):
 
-encoder_inputs = tf.placeholder(shape=(None, None), dtype=tf.int32, name='encoder_inputs')
-decoder_targets = tf.placeholder(shape=(None, None), dtype=tf.int32, name='decoder_targets')
+        self.vocab_size = vocab_size
+        self.input_embedding_size = input_embedding_size
+        self.encoder_hidden_units = encoder_hidden_units
+        self.decoder_hidden_units = decoder_hidden_units
 
-decoder_inputs = tf.placeholder(shape=(None, None), dtype=tf.int32, name='decoder_inputs')
 
-embeddings = tf.Variable(tf.random_uniform([vocab_size, input_embedding_size], -1.0, 1.0), dtype=tf.float32)
+    def build_embeddings(self):
 
-encoder_inputs_embedded = tf.nn.embedding_lookup(embeddings, encoder_inputs)
-decoder_inputs_embedded = tf.nn.embedding_lookup(embeddings, decoder_inputs)
+        self.encoder_inputs = tf.placeholder(shape=(None, None), dtype=tf.int32, name='encoder_inputs')
+        self.decoder_targets = tf.placeholder(shape=(None, None), dtype=tf.int32, name='decoder_targets')
 
-encoder_cell = tf.contrib.rnn.LSTMCell(encoder_hidden_units)
+        self.decoder_inputs = tf.placeholder(shape=(None, None), dtype=tf.int32, name='decoder_inputs')
 
-encoder_outputs, encoder_final_state = tf.nn.dynamic_rnn(
-    encoder_cell, encoder_inputs_embedded,
-    dtype=tf.float32, time_major=True,
-)
+        self.embeddings = tf.Variable(tf.random_uniform([self.vocab_size, self.input_embedding_size], -1.0, 1.0), dtype=tf.float32)
 
-del encoder_outputs
+        self.encoder_inputs_embedded = tf.nn.embedding_lookup(self.embeddings, self.encoder_inputs)
+        self.decoder_inputs_embedded = tf.nn.embedding_lookup(self.embeddings, self.decoder_inputs)
 
-decoder_cell = tf.contrib.rnn.LSTMCell(decoder_hidden_units)
+    def build_encoder(self):
 
-decoder_outputs, decoder_final_state = tf.nn.dynamic_rnn(
-    decoder_cell, decoder_inputs_embedded,
+        self.encoder_cell = tf.contrib.rnn.LSTMCell(self.encoder_hidden_units)
 
-    initial_state=encoder_final_state,
+        self.encoder_outputs, self.encoder_final_state = tf.nn.dynamic_rnn(
+            self.encoder_cell, self.encoder_inputs_embedded,
+            dtype=tf.float32, time_major=True,
+        )
 
-    dtype=tf.float32, time_major=True, scope="plain_decoder",
-)
+    def build_decoder(self):
 
-decoder_logits = tf.contrib.layers.linear(decoder_outputs, vocab_size)
+        self.decoder_cell = tf.contrib.rnn.LSTMCell(self.decoder_hidden_units)
 
-decoder_prediction = tf.argmax(decoder_logits, 2)
+        self.decoder_outputs, self.decoder_final_state = tf.nn.dynamic_rnn(
+            self.decoder_cell, self.decoder_inputs_embedded,
 
-stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
-    labels=tf.one_hot(decoder_targets, depth=vocab_size, dtype=tf.float32),
-    logits=decoder_logits,
-)
+            initial_state=self.encoder_final_state,
 
-loss = tf.reduce_mean(stepwise_cross_entropy)
-train_op = tf.train.AdamOptimizer().minimize(loss)
+            dtype=tf.float32, time_major=True, scope="plain_decoder",
+        )
 
-init = tf.global_variables_initializer()
+    def build(self):
+        """
+        Build a tensorflow graph.
+        """
+        self.build_embeddings()
+        self.build_encoder()
+        self.build_decoder()
+
+        # finally a linear layer on top of the decoder outputs
+        self.decoder_logits = tf.contrib.layers.linear(self.decoder_outputs, self.vocab_size)
+
+        self.decoder_prediction = tf.argmax(self.decoder_logits, 2)
+
+        self.stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+            labels=tf.one_hot(self.decoder_targets, depth=self.vocab_size, dtype=tf.float32),
+            logits=self.decoder_logits,
+        )
+
+        self.loss = tf.reduce_mean(self.stepwise_cross_entropy)
+        self.train_op = tf.train.AdamOptimizer().minimize(self.loss)
+
+        self.init = tf.global_variables_initializer()
+
+m = Model()
 
 with tf.Session() as sess:
 
-    sess.run(init)
+    sess.run(m.init)
 
     batch_ = [[6], [3, 4], [9, 8, 7]]
 
@@ -77,10 +100,10 @@ with tf.Session() as sess:
                                 max_sequence_length=4)
     print('decoder inputs:\n' + str(din_))
 
-    pred_ = sess.run(decoder_prediction,
+    pred_ = sess.run(m.decoder_prediction,
         feed_dict={
-            encoder_inputs: batch_,
-            decoder_inputs: din_,
+            m.encoder_inputs: batch_,
+            m.decoder_inputs: din_,
         })
     print('decoder predictions:\n' + str(pred_))
 
@@ -105,9 +128,9 @@ with tf.Session() as sess:
             [[C.EOS] + (sequence) for sequence in batch]
         )
         return {
-            encoder_inputs: encoder_inputs_,
-            decoder_inputs: decoder_inputs_,
-            decoder_targets: decoder_targets_,
+            m.encoder_inputs: encoder_inputs_,
+            m.decoder_inputs: decoder_inputs_,
+            m.decoder_targets: decoder_targets_,
         }
 
 
@@ -117,22 +140,21 @@ with tf.Session() as sess:
     max_batches = 2000
     batches_in_epoch = 100
 
-    try:
-        for batch in range(max_batches):
-            fd = next_feed()
-            _, l = sess.run([train_op, loss], fd)
-            loss_track.append(l)
 
-            if batch == 0 or batch % batches_in_epoch == 0:
-                print('batch {}'.format(batch))
-                print('  minibatch loss: {}'.format(sess.run(loss, fd)))
-                predict_ = sess.run(decoder_prediction, fd)
-                for i, (inp, pred) in enumerate(zip(fd[encoder_inputs].T, predict_.T)):
-                    print('  sample {}:'.format(i + 1))
-                    print('    input     > {}'.format(inp))
-                    print('    predicted > {}'.format(pred))
-                    if i >= 2:
-                        break
-                print()
-    except KeyboardInterrupt:
-        print('training interrupted')
+    for batch in range(max_batches):
+        fd = next_feed()
+        _, l = sess.run([m.train_op, m.loss], fd)
+        loss_track.append(l)
+
+        if batch == 0 or batch % batches_in_epoch == 0:
+            print('batch {}'.format(batch))
+            print('  minibatch loss: {}'.format(sess.run(m.loss, fd)))
+            predict_ = sess.run(m.decoder_prediction, fd)
+            for i, (inp, pred) in enumerate(zip(fd[m.encoder_inputs].T, predict_.T)):
+                print('  sample {}:'.format(i + 1))
+                print('    input     > {}'.format(inp))
+                print('    predicted > {}'.format(pred))
+                if i >= 2:
+                    break
+            print()
+
