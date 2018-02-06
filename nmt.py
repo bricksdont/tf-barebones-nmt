@@ -72,7 +72,7 @@ class Model():
         # finally a linear layer on top of the decoder outputs
         self.decoder_logits = tf.contrib.layers.linear(self.decoder_outputs, self.vocab_size)
 
-        self.decoder_prediction = tf.argmax(self.decoder_logits, 2)
+        self.decoder_prediction = tf.argmax(self.decoder_logits, axis=2)
 
         self.stepwise_cross_entropy = tf.nn.softmax_cross_entropy_with_logits_v2(
             labels=tf.one_hot(self.decoder_targets, depth=self.vocab_size, dtype=tf.float32),
@@ -139,8 +139,8 @@ class Model():
 
 
             for batch in range(max_batches):
-                fd = self._next_feed(batches)
-                _, l = sess.run([self.train_op, self.loss], fd)
+                feed_dict_ = self._next_feed(batches)
+                _, l = sess.run([self.train_op, self.loss], feed_dict_)
                 self.loss_track.append(l)
 
                 if batch == 0 or batch % batches_in_epoch == 0:
