@@ -135,14 +135,14 @@ class Model():
             for seq in next(batches)[:10]:
                 print(seq)
 
-            loss_track = []
+            self.loss_track = []
             batches_in_epoch = 100
 
 
             for batch in range(max_batches):
                 fd = self._next_feed(batches)
                 _, l = sess.run([self.train_op, self.loss], fd)
-                loss_track.append(l)
+                self.loss_track.append(l)
 
                 if batch == 0 or batch % batches_in_epoch == 0:
                     print('batch {}'.format(batch))
@@ -159,6 +159,9 @@ class Model():
 
 # create model instance
 m = Model()
+
+# build model
+m.build()
 
 # try current predictions with a dummy batch
 batch_ = [[6], [3, 4], [9, 8, 7]]
